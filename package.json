@@ -1,0 +1,10 @@
+{
+  "name": "world-cup-hub-backend",
+  "version": "1.0.0",
+  "description": "Backend Vercel Functions pour World Cup Hub — Auth JWT + Pronostics + Leaderboard",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.0"
+  }
+}
