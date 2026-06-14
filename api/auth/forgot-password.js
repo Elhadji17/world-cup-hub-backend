@@ -19,7 +19,7 @@ async function sendResetEmail(to, resetUrl) {
       "Content-Type":  "application/json",
     },
     body: JSON.stringify({
-      from: "World Cup Hub <onboarding@resend.dev>",
+      from:    "World Cup Hub <noreply@worldcuphub.com>",
       to:      [to],
       subject: "⚽ Réinitialisation de ton mot de passe — World Cup Hub",
       html: `
