@@ -1,57 +1,59 @@
 // api/auth/forgot-password.js
 // POST /api/auth/forgot-password
-// Body : { email }
-// Envoie un email avec un lien de réinitialisation
+// Envoie un email de réinitialisation via Nodemailer + Gmail
 
 import crypto           from "crypto";
+import nodemailer       from "nodemailer";
 import { connectDB }    from "../../lib/mongodb.js";
 import { User, PasswordResetToken } from "../../lib/models.js";
 import { handleCors }   from "../../lib/auth.js";
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FRONTEND_URL   = process.env.FRONTEND_URL ?? "https://world-cup-hub-kappa.vercel.app";
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://world-cup-hub-kappa.vercel.app";
+
+// Transporter Gmail
+function createTransporter() {
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_PASS,
+    },
+  });
+}
 
 async function sendResetEmail(to, resetUrl) {
-  const res = await fetch("https://api.resend.com/emails", {
-    method:  "POST",
-    headers: {
-      "Authorization": `Bearer ${RESEND_API_KEY}`,
-      "Content-Type":  "application/json",
-    },
-    body: JSON.stringify({
-      from: "World Cup Hub <onboarding@resend.dev>",
-      to:      [to],
-      subject: "⚽ Réinitialisation de ton mot de passe — World Cup Hub",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0f172a; color: white; padding: 32px; border-radius: 16px;">
-          <h1 style="color: #4ade80; font-size: 24px; margin-bottom: 8px;">⚽ World Cup Hub</h1>
-          <h2 style="font-size: 20px; margin-bottom: 16px;">Réinitialisation de mot de passe</h2>
-          <p style="color: #94a3b8; margin-bottom: 24px;">
-            Tu as demandé à réinitialiser ton mot de passe. Clique sur le bouton ci-dessous.
-            Ce lien est valable <strong style="color: white;">1 heure</strong>.
-          </p>
-          <a href="${resetUrl}"
-             style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px;
-                    border-radius: 12px; text-decoration: none; font-weight: bold; font-size: 16px;">
-            Réinitialiser mon mot de passe
-          </a>
-          <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
-            Si tu n'as pas demandé cette réinitialisation, ignore cet email.<br/>
-            Le lien expirera automatiquement dans 1 heure.
-          </p>
-          <hr style="border-color: #1e293b; margin: 24px 0;" />
-          <p style="color: #475569; font-size: 11px;">
-            World Cup Hub 2026 — ${FRONTEND_URL}
-          </p>
-        </div>
-      `,
-    }),
-  });
+  const transporter = createTransporter();
 
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(`Resend error: ${err.message}`);
-  }
+  await transporter.sendMail({
+    from:    `"World Cup Hub ⚽" <${process.env.GMAIL_USER}>`,
+    to,
+    subject: "⚽ Réinitialisation de ton mot de passe — World Cup Hub",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;
+                  background: #0f172a; color: white; padding: 32px; border-radius: 16px;">
+        <h1 style="color: #4ade80; font-size: 24px; margin-bottom: 8px;">⚽ World Cup Hub</h1>
+        <h2 style="font-size: 20px; margin-bottom: 16px;">Réinitialisation de mot de passe</h2>
+        <p style="color: #94a3b8; margin-bottom: 24px;">
+          Tu as demandé à réinitialiser ton mot de passe.<br/>
+          Clique sur le bouton ci-dessous — ce lien est valable <strong style="color: white;">1 heure</strong>.
+        </p>
+        <a href="${resetUrl}"
+           style="display: inline-block; background: #2563eb; color: white;
+                  padding: 14px 28px; border-radius: 12px; text-decoration: none;
+                  font-weight: bold; font-size: 16px;">
+          Réinitialiser mon mot de passe
+        </a>
+        <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
+          Si tu n'as pas demandé cette réinitialisation, ignore cet email.<br/>
+          Le lien expirera automatiquement dans 1 heure.
+        </p>
+        <hr style="border-color: #1e293b; margin: 24px 0;" />
+        <p style="color: #475569; font-size: 11px;">
+          World Cup Hub 2026 — ${FRONTEND_URL}
+        </p>
+      </div>
+    `,
+  });
 }
 
 export default async function handler(req, res) {
@@ -74,7 +76,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Supprimer les anciens tokens pour cet utilisateur
+    // Supprimer les anciens tokens
     await PasswordResetToken.deleteMany({ userId: user._id });
 
     // Générer un token sécurisé
