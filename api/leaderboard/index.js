@@ -1,6 +1,8 @@
 // api/leaderboard/index.js
 // GET /api/leaderboard?limit=20
 // Public — pas besoin de token
+// GET /api/leaderboard          → classement pronostics
+// GET /api/leaderboard?type=results → scores réels des matchs
 // Retourne : { leaderboard: [{ rank, username, totalPoints, exactScores, correctResults }] }
 
 import { connectDB } from "../../lib/mongodb.js";
