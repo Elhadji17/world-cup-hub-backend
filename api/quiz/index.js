@@ -1,13 +1,12 @@
 // api/quiz/index.js
-// Route unique pour tout le système Quiz
-// GET  /api/quiz?action=stats        → coins + vies du joueur
-// POST /api/quiz?action=submit       → soumettre résultat d'une partie
-// POST /api/quiz?action=shop         → acheter un article
-// GET  /api/quiz?action=leaderboard  → classement mondial
+// GET  /api/quiz?action=stats
+// POST /api/quiz?action=submit
+// POST /api/quiz?action=shop
+// GET  /api/quiz?action=leaderboard
 
-import { connectDB }              from "../../lib/mongodb.js";
-import { GameStats }              from "../../lib/models.js";
-import { verifyToken, handleCors } from "../../lib/auth.js";
+import { connectDB }               from "../../lib/mongodb.js";
+import { GameStats }               from "../../lib/models.js";
+import { verifyToken, handleCors }  from "../../lib/auth.js";
 
 const LIFE_REGEN_MS = 60 * 60 * 1000;
 const MAX_LIVES     = 5;
@@ -24,15 +23,15 @@ function regenLives(lives, lastLifeAt) {
   const elapsed  = Date.now() - new Date(lastLifeAt).getTime();
   const regenned = Math.floor(elapsed / LIFE_REGEN_MS);
   if (regenned <= 0) return { lives, lastLifeAt };
-  const newLives    = Math.min(lives + regenned, MAX_LIVES);
-  const newLastLife = new Date(new Date(lastLifeAt).getTime() + regenned * LIFE_REGEN_MS);
-  return { lives: newLives, lastLifeAt: newLastLife };
+  return {
+    lives:      Math.min(lives + regenned, MAX_LIVES),
+    lastLifeAt: new Date(new Date(lastLifeAt).getTime() + regenned * LIFE_REGEN_MS),
+  };
 }
 
 export default async function handler(req, res) {
   handleCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
-
   const action = req.query.action;
   await connectDB();
 
@@ -42,16 +41,12 @@ export default async function handler(req, res) {
     if (!decoded) return res.status(401).json({ error: "Token invalide." });
 
     let stats = await GameStats.findOne({ userId: decoded.id });
-    if (!stats) {
-      stats = await GameStats.create({ userId: decoded.id, username: decoded.username });
-    }
+    if (!stats) stats = await GameStats.create({ userId: decoded.id, username: decoded.username });
 
     const { lives, lastLifeAt } = regenLives(stats.lives, stats.lastLifeAt);
     if (lives !== stats.lives) {
       stats = await GameStats.findOneAndUpdate(
-        { userId: decoded.id },
-        { lives, lastLifeAt },
-        { new: true }
+        { userId: decoded.id }, { lives, lastLifeAt }, { new: true }
       );
     }
 
@@ -60,10 +55,16 @@ export default async function handler(req, res) {
     const isDoubleCoins = stats.doubleCoinsUntil && new Date(stats.doubleCoinsUntil) > new Date();
 
     return res.status(200).json({
-      coins: stats.coins, lives: stats.lives, totalCoins: stats.totalCoins,
-      quizPlayed: stats.quizPlayed, quizCorrect: stats.quizCorrect,
-      bestStreak: stats.bestStreak, nextLifeIn,
-      freeHintsLeft: stats.freeHintsLeft, isDoubleCoins,
+      coins:        stats.coins,
+      lives:        stats.lives,
+      totalCoins:   stats.totalCoins,
+      totalPoints:  stats.totalPoints ?? 0,
+      quizPlayed:   stats.quizPlayed,
+      quizCorrect:  stats.quizCorrect,
+      bestStreak:   stats.bestStreak,
+      nextLifeIn,
+      freeHintsLeft: stats.freeHintsLeft,
+      isDoubleCoins,
     });
   }
 
@@ -82,24 +83,45 @@ export default async function handler(req, res) {
     const isDoubleCoins = stats.doubleCoinsUntil && new Date(stats.doubleCoinsUntil) > new Date();
     const multiplier    = isDoubleCoins ? 2 : 1;
 
-    let coinsEarned = correct * 10 * multiplier;
-    if (fastAnswers > 0) coinsEarned += fastAnswers * 10 * multiplier;
-    if (streak >= 10)    coinsEarned += 80 * multiplier;
-    else if (streak >= 5) coinsEarned += 30 * multiplier;
+    // Points (classement) — même calcul que coins mais jamais dépensés
+    const pointsBase = (correct * 10) +
+      (fastAnswers * 10) +
+      (streak >= 10 ? 80 : streak >= 5 ? 30 : 0);
+    const pointsEarned = pointsBase; // points jamais multipliés par double coins
 
-    const newLives      = Math.max(0, currentLives - livesUsed);
+    // Coins (monnaie) — multipliés par double coins si actif
+    const coinsEarned = pointsBase * multiplier;
+
+    const newLives      = Math.max(0, currentLives - (livesUsed ?? 0));
     const newLastLifeAt = newLives < currentLives ? new Date() : lastLifeAt;
 
     const updated = await GameStats.findOneAndUpdate(
       { userId: decoded.id },
       {
-        $inc: { coins: coinsEarned, totalCoins: coinsEarned, quizPlayed: 1, quizCorrect: correct },
-        $set: { lives: newLives, lastLifeAt: newLastLifeAt, bestStreak: Math.max(stats.bestStreak, streak ?? 0) },
+        $inc: {
+          coins:       coinsEarned,
+          totalCoins:  coinsEarned,
+          totalPoints: pointsEarned,  // ← points classement
+          quizPlayed:  1,
+          quizCorrect: correct,
+        },
+        $set: {
+          lives:      newLives,
+          lastLifeAt: newLastLifeAt,
+          bestStreak: Math.max(stats.bestStreak, streak ?? 0),
+        },
       },
       { new: true }
     );
 
-    return res.status(200).json({ coinsEarned, coins: updated.coins, lives: updated.lives, isDoubleCoins });
+    return res.status(200).json({
+      coinsEarned,
+      pointsEarned,
+      coins:       updated.coins,
+      lives:       updated.lives,
+      totalPoints: updated.totalPoints,
+      isDoubleCoins,
+    });
   }
 
   // ── POST shop ─────────────────────────────────────────────────────────────
@@ -118,33 +140,46 @@ export default async function handler(req, res) {
     }
 
     const update = { $inc: { coins: -shopItem.cost }, $set: {} };
-    if (shopItem.lives > 0) update.$set.lives = stats.lives + shopItem.lives;
+    if (shopItem.lives > 0)    update.$set.lives = stats.lives + shopItem.lives;
     if (shopItem.duration > 0) update.$set.doubleCoinsUntil = new Date(Date.now() + shopItem.duration * 60 * 1000);
     if (shopItem.hints > 0)    update.$inc.freeHintsLeft = shopItem.hints;
 
-    const updated = await GameStats.findOneAndUpdate({ userId: decoded.id }, update, { new: true });
-    return res.status(200).json({ message: "Achat effectué !", coins: updated.coins, lives: updated.lives, item });
+    const updated = await GameStats.findOneAndUpdate(
+      { userId: decoded.id }, update, { new: true }
+    );
+    return res.status(200).json({
+      message: "Achat effectué !",
+      coins:   updated.coins,
+      lives:   updated.lives,
+      item,
+    });
   }
 
-  // ── GET leaderboard ───────────────────────────────────────────────────────
+  // ── GET leaderboard — trié par totalPoints ────────────────────────────────
   if (req.method === "GET" && action === "leaderboard") {
     const limit = Math.min(parseInt(req.query.limit ?? "50"), 100);
     const leaderboard = await GameStats.find({})
-      .sort({ totalCoins: -1, quizCorrect: -1 })
+      .sort({ totalPoints: -1, quizCorrect: -1 })
       .limit(limit)
-      .select("username totalCoins coins quizPlayed quizCorrect bestStreak")
+      .select("username totalPoints totalCoins coins quizPlayed quizCorrect bestStreak")
       .lean();
 
     const ranked = leaderboard.map((e, i) => ({
-      rank: i + 1, username: e.username, totalCoins: e.totalCoins,
-      coins: e.coins, quizPlayed: e.quizPlayed, quizCorrect: e.quizCorrect,
-      bestStreak: e.bestStreak,
-      accuracy: e.quizPlayed > 0 ? Math.round((e.quizCorrect / (e.quizPlayed * 10)) * 100) : 0,
+      rank:        i + 1,
+      username:    e.username,
+      totalPoints: e.totalPoints ?? 0,
+      totalCoins:  e.totalCoins,
+      coins:       e.coins,
+      quizPlayed:  e.quizPlayed,
+      quizCorrect: e.quizCorrect,
+      bestStreak:  e.bestStreak,
+      accuracy:    e.quizPlayed > 0
+        ? Math.round((e.quizCorrect / (e.quizPlayed * 10)) * 100) : 0,
     }));
 
     res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
     return res.status(200).json({ leaderboard: ranked });
   }
 
-  return res.status(400).json({ error: "Action invalide. Utilise ?action=stats|submit|shop|leaderboard" });
+  return res.status(400).json({ error: "Action invalide." });
 }
