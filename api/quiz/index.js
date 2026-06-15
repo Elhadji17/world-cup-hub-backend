@@ -118,7 +118,7 @@ export default async function handler(req, res) {
     }
 
     const update = { $inc: { coins: -shopItem.cost }, $set: {} };
-    if (shopItem.lives > 0)    update.$set.lives = Math.min(stats.lives + shopItem.lives, MAX_LIVES);
+    if (shopItem.lives > 0) update.$set.lives = stats.lives + shopItem.lives;
     if (shopItem.duration > 0) update.$set.doubleCoinsUntil = new Date(Date.now() + shopItem.duration * 60 * 1000);
     if (shopItem.hints > 0)    update.$inc.freeHintsLeft = shopItem.hints;
 
