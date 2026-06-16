@@ -224,5 +224,67 @@ export default async function handler(req, res) {
     return res.status(200).json({ coins: updated.coins, coinsGained });
   }
 
+  // ── POST stripe-checkout ──────────────────────────────────────────────────
+  if (req.method === "POST" && action === "stripe-checkout") {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ error: "Token invalide." });
+
+    const { default: Stripe } = await import("stripe");
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+    const COIN_PACKS = {
+      "coins_500":  { coins: 500,  price: 99,  label: "500 coins"  },
+      "coins_1200": { coins: 1200, price: 199, label: "1200 coins" },
+      "coins_3000": { coins: 3000, price: 499, label: "3000 coins" },
+      "coins_7000": { coins: 7000, price: 999, label: "7000 coins" },
+    };
+
+    const { packId } = req.body ?? {};
+    const pack = COIN_PACKS[packId];
+    if (!pack) return res.status(400).json({ error: "Pack introuvable." });
+
+    const frontendUrl = process.env.FRONTEND_URL ?? "https://worldcuphub2026.vercel.app";
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      line_items: [{ price_data: { currency: "eur", unit_amount: pack.price, product_data: { name: `⚽ World Cup Hub — ${pack.label}` } }, quantity: 1 }],
+      metadata: { userId: decoded.id, username: decoded.username, packId, coins: pack.coins.toString() },
+      success_url: `${frontendUrl}/shop/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${frontendUrl}/shop/coins`,
+    });
+    return res.status(200).json({ url: session.url });
+  }
+
+  // ── POST stripe-webhook ───────────────────────────────────────────────────
+  if (req.method === "POST" && action === "stripe-webhook") {
+    const { default: Stripe } = await import("stripe");
+    const stripe  = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const sig     = req.headers["stripe-signature"];
+    const secret  = process.env.STRIPE_WEBHOOK_SECRET;
+    let event;
+    try {
+      const rawBody = await new Promise((resolve, reject) => {
+        let data = "";
+        req.on("data", chunk => { data += chunk; });
+        req.on("end", () => resolve(data));
+        req.on("error", reject);
+      });
+      event = stripe.webhooks.constructEvent(rawBody, sig, secret);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (event.type === "checkout.session.completed") {
+      const { userId, coins } = event.data.object.metadata ?? {};
+      if (userId && coins) {
+        await GameStats.findOneAndUpdate(
+          { userId },
+          { $inc: { coins: parseInt(coins), totalCoins: parseInt(coins) } },
+          { upsert: true }
+        );
+      }
+    }
+    return res.status(200).json({ received: true });
+  }
+
   return res.status(400).json({ error: "Action invalide." });
 }
