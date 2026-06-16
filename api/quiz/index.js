@@ -16,6 +16,9 @@ const SHOP_ITEMS = {
   "life_3":    { cost: 120, lives: 3, duration: null, hints: 0 },
   "double_1h": { cost: 200, lives: 0, duration: 60,   hints: 0 },
   "hints_3":   { cost: 80,  lives: 0, duration: null, hints: 3 },
+  "pack_bronze":  { cost: 100, lives: 0, duration: null, hints: 0, pack: "bronze" },
+  "pack_silver":  { cost: 300, lives: 0, duration: null, hints: 0, pack: "silver" },
+  "pack_gold":    { cost: 800, lives: 0, duration: null, hints: 0, pack: "gold"   },
 };
 
 function regenLives(lives, lastLifeAt) {
