@@ -206,5 +206,23 @@ export default async function handler(req, res) {
     return res.status(200).json({ saved: cards.length });
   }
 
+  // ── POST exchange — doublon contre coins ─────────────────────────────────
+  if (req.method === "POST" && action === "exchange") {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ error: "Token invalide." });
+
+    const { rarity } = req.body ?? {};
+    const EXCHANGE_COINS = { legendary: 200, gold: 100, silver: 30, bronze: 15 };
+    const coinsGained = EXCHANGE_COINS[rarity] ?? 15;
+
+    const updated = await GameStats.findOneAndUpdate(
+      { userId: decoded.id },
+      { $inc: { coins: coinsGained, totalCoins: coinsGained } },
+      { new: true }
+    );
+
+    return res.status(200).json({ coins: updated.coins, coinsGained });
+  }
+
   return res.status(400).json({ error: "Action invalide." });
 }
