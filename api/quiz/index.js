@@ -184,5 +184,27 @@ export default async function handler(req, res) {
     return res.status(200).json({ leaderboard: ranked });
   }
 
+  // ── GET cards ────────────────────────────────────────────────────────────
+  if (req.method === "GET" && action === "cards") {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ error: "Token invalide." });
+    const stats = await GameStats.findOne({ userId: decoded.id });
+    return res.status(200).json({ cards: stats?.cards ?? [] });
+  }
+
+  // ── POST save-cards ───────────────────────────────────────────────────────
+  if (req.method === "POST" && action === "save-cards") {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ error: "Token invalide." });
+    const { cards } = req.body ?? {};
+    if (!Array.isArray(cards)) return res.status(400).json({ error: "cards requis." });
+    await GameStats.findOneAndUpdate(
+      { userId: decoded.id },
+      { $set: { cards } },
+      { upsert: true, new: true }
+    );
+    return res.status(200).json({ saved: cards.length });
+  }
+
   return res.status(400).json({ error: "Action invalide." });
 }
