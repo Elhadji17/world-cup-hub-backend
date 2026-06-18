@@ -98,7 +98,7 @@ export default async function handler(req, res) {
 
     const newLives = Math.max(0, currentLives - (livesUsed ?? 0));
     const newLastLifeAt = newLives < currentLives ? new Date() : lastLifeAt;
-    const newLastLifeAt = newLives < currentLives ? new Date() : lastLifeAt;
+
 
     const updated = await GameStats.findOneAndUpdate(
       { userId: decoded.id },
