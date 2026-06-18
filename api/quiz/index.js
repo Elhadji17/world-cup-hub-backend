@@ -96,7 +96,8 @@ export default async function handler(req, res) {
     // Coins (monnaie) — multipliés par double coins si actif
     const coinsEarned = pointsBase * multiplier;
 
-    const newLives = Math.max(0, currentLives - 1); // toujours 1 vie par partie
+    const newLives = Math.max(0, currentLives - (livesUsed ?? 0));
+    const newLastLifeAt = newLives < currentLives ? new Date() : lastLifeAt;
     const newLastLifeAt = newLives < currentLives ? new Date() : lastLifeAt;
 
     const updated = await GameStats.findOneAndUpdate(
