@@ -8,7 +8,7 @@ import { connectDB }               from "../../lib/mongodb.js";
 import { GameStats }               from "../../lib/models.js";
 import { verifyToken, handleCors }  from "../../lib/auth.js";
 
-const LIFE_REGEN_MS = 60 * 60 * 1000;
+const LIFE_REGEN_MS = 30 * 60 * 1000; // 30 min
 const MAX_LIVES     = 5;
 
 const SHOP_ITEMS = {
