@@ -226,5 +226,71 @@ export default async function handler(req, res) {
     return res.status(200).json({ coins: updated.coins, coinsGained });
   }
 
+  // ── POST challenge-create ─────────────────────────────────────────────────
+if (req.method === "POST" && action === "challenge-create") {
+  const decoded = verifyToken(req);
+  if (!decoded) return res.status(401).json({ error: "Token invalide." });
+
+  const { team, rating } = req.body ?? {};
+  if (!team?.length) return res.status(400).json({ error: "Équipe requise." });
+
+  const { Challenge } = await import("../../lib/models.js");
+  const challengeId = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+  await Challenge.create({
+    challengeId,
+    challenger:       decoded.username,
+    challengerTeam:   team,
+    challengerRating: rating ?? 0,
+  });
+
+  return res.status(200).json({ challengeId });
+}
+
+// ── GET challenge-get ─────────────────────────────────────────────────────
+if (req.method === "GET" && action === "challenge-get") {
+  const { id } = req.query;
+  if (!id) return res.status(400).json({ error: "ID requis." });
+
+  const { Challenge } = await import("../../lib/models.js");
+  const challenge = await Challenge.findOne({ challengeId: id });
+  if (!challenge) return res.status(404).json({ error: "Défi introuvable." });
+
+  return res.status(200).json({ challenge });
+}
+
+// ── POST challenge-accept ─────────────────────────────────────────────────
+  if (req.method === "POST" && action === "challenge-accept") {
+    const { id, opponentName, opponentTeam, opponentRating } = req.body ?? {};
+    if (!id) return res.status(400).json({ error: "ID requis." });
+
+    const { Challenge } = await import("../../lib/models.js");
+    const challenge = await Challenge.findOne({ challengeId: id });
+    if (!challenge) return res.status(404).json({ error: "Défi introuvable." });
+
+    // Simuler le match
+    function simGoals(atk, def) {
+      const diff = (atk - def) / 20;
+      return Math.max(0, Math.round(Math.min(diff + (Math.random() * 2 - 0.5), 6)));
+    }
+
+    const myGoals  = simGoals(challenge.challengerRating, opponentRating ?? 70);
+    const hisGoals = simGoals(opponentRating ?? 70, challenge.challengerRating);
+
+    const result = {
+      challengerScore: myGoals,
+      opponentScore:   hisGoals,
+      winner: myGoals > hisGoals ? challenge.challenger :
+              hisGoals > myGoals ? opponentName : "draw",
+    };
+
+    await Challenge.findOneAndUpdate(
+      { challengeId: id },
+      { opponent: opponentName, result, status: "completed" }
+    );
+
+    return res.status(200).json({ result });
+  }
+
   return res.status(400).json({ error: "Action invalide." });
 }
