@@ -5,7 +5,7 @@
 // GET  /api/quiz?action=leaderboard
 
 import { connectDB }               from "../../lib/mongodb.js";
-import { GameStats }               from "../../lib/models.js";
+import { GameStats, Challenge } from "../../lib/models.js";
 import { verifyToken, handleCors }  from "../../lib/auth.js";
 
 const LIFE_REGEN_MS = 30 * 60 * 1000; // 30 min
@@ -234,7 +234,7 @@ if (req.method === "POST" && action === "challenge-create") {
   const { team, rating } = req.body ?? {};
   if (!team?.length) return res.status(400).json({ error: "Équipe requise." });
 
-  const { Challenge } = await import("../../lib/models.js");
+
   const challengeId = Math.random().toString(36).slice(2, 8).toUpperCase();
 
   await Challenge.create({
@@ -252,7 +252,7 @@ if (req.method === "GET" && action === "challenge-get") {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: "ID requis." });
 
-  const { Challenge } = await import("../../lib/models.js");
+
   const challenge = await Challenge.findOne({ challengeId: id });
   if (!challenge) return res.status(404).json({ error: "Défi introuvable." });
 
@@ -264,7 +264,6 @@ if (req.method === "GET" && action === "challenge-get") {
     const { id, opponentName, opponentTeam, opponentRating } = req.body ?? {};
     if (!id) return res.status(400).json({ error: "ID requis." });
 
-    const { Challenge } = await import("../../lib/models.js");
     const challenge = await Challenge.findOne({ challengeId: id });
     if (!challenge) return res.status(404).json({ error: "Défi introuvable." });
 
