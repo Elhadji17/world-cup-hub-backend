@@ -194,6 +194,35 @@ export default async function handler(req, res) {
     return res.status(200).json({ cards: stats?.cards ?? [] });
   }
 
+  // ── GET get-progress — questions vues par catégorie (niveaux quiz) ───────
+  if (req.method === "GET" && action === "get-progress") {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ error: "Token invalide." });
+    const stats = await GameStats.findOne({ userId: decoded.id });
+    return res.status(200).json({ seenQuestions: stats?.seenQuestions ?? {} });
+  }
+
+  // ── POST save-progress — sauvegarder questions vues pour une catégorie ───
+  if (req.method === "POST" && action === "save-progress") {
+    const decoded = verifyToken(req);
+    if (!decoded) return res.status(401).json({ error: "Token invalide." });
+    const { categoryId, seenIds } = req.body ?? {};
+    if (!categoryId || !Array.isArray(seenIds)) {
+      return res.status(400).json({ error: "categoryId et seenIds requis." });
+    }
+    const stats = await GameStats.findOne({ userId: decoded.id });
+    const current = stats?.seenQuestions ?? {};
+    const merged  = [...new Set([...(current[categoryId] ?? []), ...seenIds])];
+    const updatedSeenQuestions = { ...current, [categoryId]: merged };
+
+    await GameStats.findOneAndUpdate(
+      { userId: decoded.id },
+      { $set: { seenQuestions: updatedSeenQuestions } },
+      { upsert: true, new: true }
+    );
+    return res.status(200).json({ seenQuestions: updatedSeenQuestions });
+  }
+
   // ── POST save-cards ───────────────────────────────────────────────────────
   if (req.method === "POST" && action === "save-cards") {
     const decoded = verifyToken(req);
